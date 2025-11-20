@@ -1,0 +1,56 @@
+{
+  "name": "jamkv",
+  "version": "0.0.0",
+  "description": "libsql-based key-value store for Deno, Node.js and the browser",
+  "repository": "JAMflow-Cloud/jamkv",
+  "sideEffects": false,
+  "type": "module",
+  "author": {
+    "name": "Sandro Circi",
+    "email": "sandro.circi@digitoolmedia.com"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "unbuild",
+    "dev": "npx --yes listhen -w ./playground/main.ts",
+    "lint": "eslint . && prettier -c .",
+    "lint:fix": "automd && eslint . --fix && prettier -w .",
+    "prepack": "pnpm build",
+    "release": "pnpm test && pnpm prepack && changelogen --release --push --publish",
+    "test": "pnpm lint && pnpm test:types && vitest run",
+    "test:coverage": "pnpm lint && pnpm test:types && vitest run --coverage",
+    "test:types": "tsc --noEmit --skipLibCheck",
+    "bench": "vitest bench --run"
+  },
+  "resolutions": {
+    "jamkv": "link:."
+  },
+  "dependencies": {
+    "@libsql/client": "^0.15.15",
+    "unsecure": "^0.0.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@vitest/coverage-v8": "^4.0.4",
+    "automd": "^0.4.2",
+    "changelogen": "^0.6.2",
+    "eslint": "^9.38.0",
+    "eslint-config-unjs": "^0.5.0",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3",
+    "unbuild": "^3.6.1",
+    "vitest": "^4.0.4"
+  },
+  "packageManager": "pnpm@10.22.0"
+}
