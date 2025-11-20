@@ -4,13 +4,14 @@ import type {
   Transaction,
   ResultSet,
   InValue,
+  Replicated,
 } from "@libsql/client";
 import { createClient } from "@libsql/client";
 import { secureGenerate } from "unsecure";
 
 // #region Types
 
-export type { Config } from "@libsql/client";
+export type { Config, Replicated } from "@libsql/client";
 
 type JSONValue =
   | string
@@ -323,6 +324,10 @@ export class LibSQLKV extends CoreKV {
   ): Promise<KVTransaction> {
     const tx = await this.client.transaction(mode);
     return new KVTransaction(tx, this.tableName);
+  }
+
+  async sync(): Promise<Replicated> {
+    return this.client.sync();
   }
 
   /**
