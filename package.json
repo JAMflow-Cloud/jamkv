@@ -1,6 +1,6 @@
 {
   "name": "jamkv",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "libsql-based key-value store for Deno, Node.js and the browser",
   "repository": "JAMflow-Cloud/jamkv",
   "sideEffects": false,
