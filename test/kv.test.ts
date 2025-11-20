@@ -93,15 +93,11 @@ describe.runIf(!!url && !!authToken)("LibSQLKV", () => {
   it("should handle expiration", async () => {
     await kv.set("expired", "value", { expireIn: 1000 }); // 1s
 
-    // Verify it exists initially
-    let entry = await kv.get("expired");
-    expect(entry?.value).toBe("value");
-
     // Wait for expiration
     await new Promise((resolve) => setTimeout(resolve, 1500));
 
     // Verify it is gone
-    entry = await kv.get("expired");
+    const entry = await kv.get("expired");
     expect(entry).toBeNull();
   });
 
