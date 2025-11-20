@@ -135,30 +135,20 @@ describe.runIf(!!url && !!authToken)("LibSQLKV", () => {
   });
 
   it("should list keys with limit", async () => {
-    await Promise.all([
-      kv.set("a", 1),
-      kv.set("b", 2),
-      kv.set("c", 3),
-    ]);
+    await Promise.all([kv.set("a", 1), kv.set("b", 2), kv.set("c", 3)]);
 
     const entries = await kv.list({ limit: 2 });
     expect(entries).toHaveLength(2);
   });
 
   it("should list all keys if no options provided", async () => {
-    await Promise.all([
-      kv.set("a", 1),
-      kv.set("b", 2),
-    ]);
+    await Promise.all([kv.set("a", 1), kv.set("b", 2)]);
     const entries = await kv.list();
     expect(entries).toHaveLength(2);
   });
 
   it("should list keys in reverse order", async () => {
-    await Promise.all([
-      kv.set("a", 1),
-      kv.set("b", 2),
-    ]);
+    await Promise.all([kv.set("a", 1), kv.set("b", 2)]);
 
     const entries = await kv.list({ reverse: true });
     // Note: list returns all keys if no limit, but ordered.
@@ -172,7 +162,7 @@ describe.runIf(!!url && !!authToken)("LibSQLKV", () => {
       kv.set("user:1", { name: "Alice", age: 30 }),
       kv.set("user:2", { name: "Bob", age: 25 }),
       kv.set("user:3", { name: "Charlie", age: 35 }),
-    ])
+    ]);
 
     const entries = await kv.list({
       where: {
