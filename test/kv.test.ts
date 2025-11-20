@@ -91,14 +91,14 @@ describe.runIf(!!url && !!authToken)("LibSQLKV", () => {
   });
 
   it("should handle expiration", async () => {
-    await kv.set("expired", "value", { expireIn: 2000 }); // 2s
+    await kv.set("expired", "value", { expireIn: 1000 }); // 1s
 
     // Verify it exists initially
     let entry = await kv.get("expired");
     expect(entry?.value).toBe("value");
 
     // Wait for expiration
-    await new Promise((resolve) => setTimeout(resolve, 2500));
+    await new Promise((resolve) => setTimeout(resolve, 1500));
 
     // Verify it is gone
     entry = await kv.get("expired");
@@ -177,6 +177,109 @@ describe.runIf(!!url && !!authToken)("LibSQLKV", () => {
     expect(names).toContain("Alice");
     expect(names).toContain("Charlie");
     expect(names).not.toContain("Bob");
+  });
+
+  it("should cleanup expired keys explicitly", async () => {
+    await Promise.all([
+      kv.set("expired-explicit", "val1", { expireIn: 100 }),
+      kv.set("valid-explicit", "val2", { expireIn: 10_000 }),
+    ]);
+
+    // Wait for expiration
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    await kv.cleanupExpired();
+
+    const entry = await kv.get("expired-explicit");
+    expect(entry).toBeNull();
+    const valid = await kv.get("valid-explicit");
+    expect(valid).not.toBeNull();
+  });
+
+  it("should filter with complex where clause (AND)", async () => {
+    await Promise.all([
+      kv.set("user:1", { age: 20, role: "admin" }),
+      kv.set("user:2", { age: 30, role: "user" }),
+      kv.set("user:3", { age: 25, role: "admin" }),
+    ]);
+
+    const results = await kv.list({
+      where: ({ and }) =>
+        and(
+          { field: "role", operator: "=", value: "admin" },
+          { field: "age", operator: ">", value: 22 },
+        ),
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]?.key).toBe("user:3");
+  });
+
+  it("should filter with complex where clause (OR)", async () => {
+    await Promise.all([
+      kv.set("p:1", { category: "A", price: 10 }),
+      kv.set("p:2", { category: "B", price: 20 }),
+      kv.set("p:3", { category: "A", price: 30 }),
+    ]);
+
+    const results = await kv.list({
+      where: ({ or }) =>
+        or(
+          { field: "price", operator: "<", value: 15 },
+          { field: "price", operator: ">", value: 25 },
+        ),
+    });
+
+    expect(results).toHaveLength(2);
+    const keys = results.map((r) => r.key).sort();
+    expect(keys).toEqual(["p:1", "p:3"]);
+  });
+
+  it("should filter with complex where clause (Nested)", async () => {
+    await Promise.all([
+      kv.set("n:1", { a: 1, b: 1 }),
+      kv.set("n:2", { a: 1, b: 2 }),
+      kv.set("n:3", { a: 2, b: 1 }),
+      kv.set("n:4", { a: 2, b: 2 }),
+    ]);
+
+    // (a=1 AND b=2) OR (a=2 AND b=1)
+    const results = await kv.list({
+      where: ({ and, or }) =>
+        or(
+          and(
+            { field: "a", operator: "=", value: 1 },
+            { field: "b", operator: "=", value: 2 },
+          ),
+          and(
+            { field: "a", operator: "=", value: 2 },
+            { field: "b", operator: "=", value: 1 },
+          ),
+        ),
+    });
+
+    expect(results).toHaveLength(2);
+    const keys = results.map((r) => r.key).sort();
+    expect(keys).toEqual(["n:2", "n:3"]);
+  });
+
+  it("should filter with NOT operator", async () => {
+    await Promise.all([
+      kv.set("not:1", { type: "issue", status: "active" }),
+      kv.set("not:2", { type: "pr", status: "active" }),
+      kv.set("not:3", { type: "issue", status: "inactive" }),
+    ]);
+
+    const results = await kv.list({
+      where: ({ and, not }) =>
+        and(
+          { field: "type", operator: "=", value: "issue" },
+          not({ field: "status", operator: "=", value: "inactive" }),
+        ),
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]?.key).toBe("not:1");
   });
 
   describe("Transactions", () => {

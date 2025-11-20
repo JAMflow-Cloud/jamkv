@@ -29,16 +29,35 @@ export type KVEntry<T = KVValue> = {
   version: string;
 };
 
+export type WhereOperator = "=" | ">" | "<" | "LIKE" | "!=";
+
+export type WhereCondition = {
+  field: string;
+  operator: WhereOperator;
+  value: string | number;
+};
+
+type LogicResult = {
+  op: "AND" | "OR" | "NOT";
+  conditions: (WhereCondition | LogicResult)[];
+};
+
+export type AndFn = (...args: (WhereCondition | LogicResult)[]) => LogicResult;
+export type OrFn = (...args: (WhereCondition | LogicResult)[]) => LogicResult;
+export type NotFn = (arg: WhereCondition | LogicResult) => LogicResult;
+
+export type WhereCallback = (args: {
+  and: AndFn;
+  or: OrFn;
+  not: NotFn;
+}) => LogicResult;
+
 export type ListOptions = {
   prefix?: string;
   limit?: number;
   cursor?: string;
   // JSON filtering
-  where?: {
-    field: string;
-    operator: "=" | ">" | "<" | "LIKE";
-    value: string | number;
-  };
+  where?: WhereCondition | WhereCallback;
   reverse?: boolean;
 };
 
@@ -138,6 +157,13 @@ ON CONFLICT(key) DO UPDATE SET
     await this.execute(`DELETE FROM ${this.tableName} WHERE key = ?`, [key]);
   }
 
+  async cleanupExpired(): Promise<void> {
+    await this.execute(
+      `DELETE FROM ${this.tableName} WHERE expires_at IS NOT NULL AND expires_at < ?`,
+      [Date.now()],
+    );
+  }
+
   async list<T = KVValue>(options: ListOptions = {}): Promise<KVEntry<T>[]> {
     let sql = `SELECT * FROM ${this.tableName} WHERE 1=1`;
     const args: InValue[] = [];
@@ -154,14 +180,28 @@ ON CONFLICT(key) DO UPDATE SET
 
     // 3. JSON Filtering
     if (options.where) {
-      // Safety check: Ensure operator is safe
-      const safeOps = ["=", ">", "<", "LIKE"];
-      const op = safeOps.includes(options.where.operator)
-        ? options.where.operator
-        : "=";
+      if (typeof options.where === "function") {
+        const and: AndFn = (...args) => ({ op: "AND", conditions: args });
+        const or: OrFn = (...args) => ({ op: "OR", conditions: args });
+        const not: NotFn = (arg) => ({ op: "NOT", conditions: [arg] });
 
-      sql += ` AND value_type = 'json' AND json_extract(value_text, ?) ${op} ?`;
-      args.push(`$.${options.where.field}`, options.where.value);
+        const logicTree = options.where({ and, or, not });
+        const { sql: whereSql, args: whereArgs } =
+          this.buildWhereSql(logicTree);
+
+        // We wrap in ( ... ) to ensure precedence
+        sql += ` AND value_type = 'json' AND (${whereSql})`;
+        args.push(...whereArgs);
+      } else {
+        // Simple object case
+        const safeOps = ["=", ">", "<", "LIKE", "!="];
+        const op = safeOps.includes(options.where.operator)
+          ? options.where.operator
+          : "=";
+
+        sql += ` AND value_type = 'json' AND json_extract(value_text, ?) ${op} ?`;
+        args.push(`$.${options.where.field}`, options.where.value);
+      }
     }
 
     // 4. Ordering
@@ -180,6 +220,49 @@ ON CONFLICT(key) DO UPDATE SET
       value: decodeValue(row) as T,
       version: row.version as string,
     }));
+  }
+
+  private buildWhereSql(condition: WhereCondition | LogicResult): {
+    sql: string;
+    args: InValue[];
+  } {
+    if ("op" in condition) {
+      // LogicResult
+      if (condition.op === "NOT") {
+        const first = condition.conditions[0];
+        if (!first) throw new Error("NOT operator requires a condition");
+        const inner = this.buildWhereSql(first);
+        return {
+          sql: `NOT (${inner.sql})`,
+          args: inner.args,
+        };
+      }
+
+      const parts: string[] = [];
+      const args: InValue[] = [];
+
+      for (const cond of condition.conditions) {
+        const res = this.buildWhereSql(cond);
+        parts.push(res.sql);
+        args.push(...res.args);
+      }
+
+      return {
+        sql: `(${parts.join(` ${condition.op} `)})`,
+        args,
+      };
+    } else {
+      // WhereCondition
+      const safeOps = ["=", ">", "<", "LIKE", "!="];
+      const op = safeOps.includes(condition.operator)
+        ? condition.operator
+        : "=";
+
+      return {
+        sql: `json_extract(value_text, ?) ${op} ?`,
+        args: [`$.${condition.field}`, condition.value],
+      };
+    }
   }
 }
 

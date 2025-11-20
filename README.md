@@ -54,7 +54,7 @@ const all = await kv.list();
 // List with prefix
 const users = await kv.list({ prefix: "user:" });
 
-// Filter by JSON field
+// Filter by JSON field (Simple)
 const adults = await kv.list({
   where: {
     field: "age",
@@ -62,10 +62,30 @@ const adults = await kv.list({
     value: 18,
   },
 });
+
+// Filter by JSON field (Complex)
+const complex = await kv.list({
+  where: ({ and, or, not }) =>
+    and(
+      { field: "role", operator: "=", value: "admin" },
+      or(
+        { field: "age", operator: ">", value: 25 },
+        { field: "experience", operator: ">", value: 5 },
+      ),
+    ),
+});
 ```
 
 > [!NOTE]
-> The `where` option currently only supports filtering a single top-level JSON field for entries where the value is a JSON object.
+> The `where` option supports filtering JSON fields. You can use the callback syntax for complex logic (AND, OR, NOT).
+
+### Expiration & Cleanup
+
+Keys with an expiration time are lazily deleted when accessed (via `get` or `getMany`) or when listing. However, to explicitly remove all expired keys from the database (e.g., via a cron job), you can use:
+
+```typescript
+await kv.cleanupExpired();
+```
 
 ### Transactions
 
